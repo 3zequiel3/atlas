@@ -1,6 +1,6 @@
 # State Contract — atlas owns `state.roadmap`
 
-Detailed reference for the orchestrated hook. **The critical path is already inline in `SKILL.md` §State integration (orquestado)** — read this only for the schema rationale and the edge cases.
+Rationale and edge cases for the orchestrated hook. **The full algorithm is inline in `SKILL.md` §State integration (orquestado)** — this file explains *why*, not *what*. You never need it to run atlas correctly.
 
 Applies to `.jr-orchestrator-state.json` with `version == 2`.
 
@@ -8,7 +8,7 @@ Applies to `.jr-orchestrator-state.json` with `version == 2`.
 
 ## 1. Schema slice
 
-atlas is the **sole writer** of the `roadmap` object. It never touches `step`, `owner`, `kb`, `skills`, or `agents`, and it preserves every other top-level key byte-for-byte, including keys it does not recognize.
+atlas is the sole writer of the `roadmap` object. It never touches `step`, `owner`, `kb`, `skills`, or `agents`, and it leaves every other top-level key with its value intact — including keys it does not recognize.
 
 ```json
 {
@@ -16,70 +16,48 @@ atlas is the **sole writer** of the `roadmap` object. It never touches `step`, `
   "roadmap": {
     "created_by": "atlas",
     "source": "CHANGES.md",
-    "changes": ["C-01", "C-02", "C-03"],
+    "changes": [
+      { "id": "C-01", "name": "foundation-setup" },
+      { "id": "C-02", "name": "core-models" }
+    ],
     "preserved_checkboxes": 2,
     "eliminated_with_progress": ["ingredients"]
   }
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `created_by` | string | Always `"atlas"` — identifies the writer. |
-| `source` | string | Path of the generated index — always `"CHANGES.md"`. |
-| `changes` | string[] | `C-NN` IDs generated, in order. Lets downstream phases know the roadmap without re-parsing. |
-| `preserved_checkboxes` | number | How many completed changes were carried over from a prior `CHANGES.md` (0 on first run). |
-| `eliminated_with_progress` | string[] | **Kebab-case names** of changes that were completed in the old file and no longer exist in the new one. `[]` if none. Names, not IDs: IDs are reassigned on every regeneration, so an ID here would point at a different change. |
+**Why `changes` carries both `id` and `name`.** The id is positional: it is reassigned on every regeneration, so a consumer that persists `"C-05"` across two runs may be pointing at a different change. The name is the stable identity. Shipping both lets a consumer render the roadmap in order *and* track a change across regenerations. Same reasoning applies to `eliminated_with_progress`, which carries names only — an id there would name something that still exists.
 
-**Thin index rationale**: per-change scope, governance, and dependencies live only in `CHANGES.md` (single source of truth). No duplication, no drift.
+**Why `preserved_checkboxes` and `eliminated_with_progress` are mandatory.** They are the only machine-readable signal that a regeneration touched existing progress. Without them the orchestrator reads a clean roadmap and cannot tell that work was dropped.
 
-**Why `preserved_checkboxes` and `eliminated_with_progress` are mandatory**: they are the only machine-readable signal that a regeneration touched existing progress. Without them the orchestrator reads a clean roadmap and cannot tell that work was dropped.
+**Thin index rationale.** Per-change scope, governance, and dependencies live only in `CHANGES.md`. No duplication, no drift.
 
 ---
 
-## 2. Write algorithm — edge cases
+## 2. Write semantics
 
-The happy path is in `SKILL.md`. What it does not spell out:
+The mechanism is parse → replace the `roadmap` value → serialize → write. That is a JSON round-trip, so byte-level identity of the file is **not** preserved: indentation, key order and number formatting may normalize. What must be preserved is **semantic**: every other key keeps its value, no key is dropped, no array is truncated or summarized. If `state.kb.files` holds 40 paths, all 40 come back.
 
-**Re-read before write.** The state file has a second writer. atlas reads `state.kb` at the *start* of the run and writes `state.roadmap` at the *end* — the orchestrator may have advanced `step` in between. Re-read the file immediately before writing, and apply the `roadmap` change to that fresh copy, never to the version read at the start.
+**Re-read before write.** The state file has a second writer. atlas reads `state.kb` at the start of a run and writes `state.roadmap` at the end — the orchestrator may have advanced `step` in between. Re-read immediately before writing and apply the change to that fresh copy, never to the version read at the start.
 
-**Preserve unknown keys.** "Write the file back" means: parse, replace the `roadmap` value, re-serialize. Any top-level key not listed in §1 — present or future — must survive unchanged. Do not normalize, reorder, or drop fields you did not model. If `state.kb.files` is a long array, it is preserved verbatim; never summarize it back into the file.
-
-**Never create.** The orchestrator (jr-orchestrator) is the sole creator. An absent state file is a no-op, not an error, and not an invitation to write one. This is what keeps atlas usable as a public standalone skill: forcing a state file on every invocation would pollute non-orchestrated repos.
+**Never create.** The orchestrator (jr-orchestrator) is the sole creator. An absent state file is a no-op, not an error. This is what keeps atlas usable as a public standalone skill: forcing a state file on every invocation would pollute non-orchestrated repos.
 
 **Never advance `step`.** The orchestrator owns step advancement. atlas signals completion by writing `state.roadmap`; the orchestrator reads it to decide when to advance.
 
-**Foreign `created_by`.** If `roadmap.created_by` exists and is not `"atlas"`, another tool owns this slice. Overwrite it and note the takeover in the closing block — do not fail, but do not do it silently either.
+**The hook is not gated on the KB source.** It fires on `version == 2` alone, even when `state.kb.files` was empty and the KB was read from disk instead. Gating it on the orchestrated *input* path would leave the orchestrator waiting forever for a signal atlas decided not to send.
 
 ---
 
-## 3. Orchestrated input rules
+## 3. Orchestrated input
 
-### 3.1 Reading KB files
+The rules are in `SKILL.md` §Input — qué leer de la KB (Orquestado) and §Pre-checks obligatorios. Two points worth the extra words:
 
-- **Primary**: `state.kb.files` is the authoritative list of KB paths.
-- **Disk existence check (mandatory)**: verify each file exists before reading it. On a miss, emit `⚠ nodo ausente: {path} — continuando sin él` and continue with the rest. Never silently skip.
-- **Fallback**: if `state.kb.files` is empty or absent, fall back to the standalone read path (glob `knowledge-base/`).
+**Pre-check 2 runs in orchestrated mode.** It is the only content gate. Skipping it lets a run whose `state.kb.files` contains, say, only a vision document proceed to emit a full dependency graph, critical path and migration ordering derived from no data model at all — fabrication presented as canonical.
 
-### 3.2 Pre-checks when orchestrated
+**`state.kb.discovery` is a hint, never a source of truth.** A wrong `system_type` degrades naming quality; it must never change scope correctness. The files are the truth.
 
-All three pre-checks from `SKILL.md` §Pre-checks obligatorios apply. Only the resolution changes:
+---
 
-| Pre-check | Orchestrated behavior |
-|-----------|----------------------|
-| 1 — KB accesible | Satisfied by a non-empty `state.kb.files`. Skip the `knowledge-base/` directory check. |
-| 2 — `04` y `08` presentes | **Runs.** Evaluate against the basenames in `state.kb.files`. This is the only content gate; skipping it lets a run proceed with no data model and fabricate the entire dependency graph. |
-| 3 — `openspec/` | Runs unchanged, unless the user opted out. |
+## 4. Standalone invariant
 
-### 3.3 Using `state.kb.discovery`
-
-Hint only, for naming and grouping — never a source of truth. A wrong discovery field degrades naming quality; it must not change scope correctness.
-
-- `needs_infra: false` → the project already has infrastructure; `C-01` is the first domain change instead of `foundation-setup`.
-- `system_type` → seeds FASE names and the agent role labels of the plan table.
-- `domain` → domain-specific changes.
-- `scale` → RBAC or multi-tenancy changes.
-
-### 3.4 Standalone invariant
-
-With no `.jr-orchestrator-state.json`, everything else is byte-identical: same pre-checks, same KB reads, same `CHANGES.md` format, same user output. The hook in §2 and the `state.kb` reads in §3.1–3.3 never fire, and no state file is created.
+With no `.jr-orchestrator-state.json`, everything else is identical: same pre-checks, same KB reads, same `CHANGES.md` format, same user output. The hook never fires, and no state file is created.

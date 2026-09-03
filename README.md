@@ -7,7 +7,7 @@
 **El mapa operativo de tu implementación.** Una skill que convierte una base de conocimiento en `CHANGES.md`: el índice canónico de todos los changes para llevar un sistema de cero a producción — con dependencias, paralelismo y camino crítico explícitos.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.1-green.svg)](SKILL.md)
+[![Version](https://img.shields.io/badge/version-3.2-green.svg)](SKILL.md)
 [![Merge-safe](https://img.shields.io/badge/regeneraci%C3%B3n-merge--safe-orange.svg)](#más-a-fondo)
 [![skills.sh](https://img.shields.io/badge/skills.sh-atlas-black.svg)](https://www.skills.sh/3zequiel3/atlas)
 
@@ -20,12 +20,12 @@
 Toma tu `knowledge-base/` y produce **un solo archivo**: `CHANGES.md`. No es una lista de tareas — es un **plan de ejecución** que responde tres preguntas que un roadmap común deja abiertas: *qué puedo hacer en paralelo*, *qué es lo mínimo irreducible para llegar a producción*, y *qué tengo que leer antes de tocar cada change*.
 
 ```
-proyecto/                          atlas                     CHANGES.md
-├── knowledge-base/   ────────►  ┌───────────────┐  ──────►  ├── Árbol de dependencias
-│   ├── 04_modelo_de_datos.md    │  dependencias │           ├── GATES de paralelismo
-│   ├── 06_funcionalidades.md    │  + paralelismo│           ├── Camino crítico
-│   └── 08_arquitectura.md       │  + governance │           ├── Plan con N agentes
-└── openspec/                    └───────────────┘           └── C-01 · C-02 · … C-NN
+proyecto/                             atlas                     CHANGES.md
+├── knowledge-base/      ────────►  ┌───────────────┐  ──────►  ├── Árbol de dependencias
+│   ├── 04_modelo_de_datos.md       │  dependencias │           ├── GATES de paralelismo
+│   ├── 06_funcionalidades.md       │  + paralelismo│           ├── Camino crítico
+│   └── 08_arquitectura_propuesta.md│  + governance │           ├── Plan con N agentes
+└── openspec/                       └───────────────┘           └── C-01 · C-02 · … C-NN
 ```
 
 Cada `C-NN` es **atómico**: un agente lo implementa en una sesión (~4-6 horas). Si no entra en una sesión, no es un change — son dos.
@@ -122,7 +122,7 @@ atlas **se detiene** antes de generar nada parcial si falta un input. No genera 
    ```bash
    npx @fission-ai/openspec@latest init
    ```
-   > ¿No usás OpenSpec? Decíselo al agente y atlas genera el plan sin las referencias a `/opsx:propose`, dejando la omisión documentada en el archivo.
+   > ¿No usás OpenSpec? Decíselo al agente y atlas genera el plan sin las referencias a `/opsx:propose`, dejando la omisión documentada en el archivo. En modo orquestado, donde no hay a quién preguntarle, atlas toma esa rama sola en vez de frenar.
 
 </details>
 
@@ -134,7 +134,7 @@ Ocho reglas, aplicadas **en este orden** de prioridad:
 1. **Infra primero** — si el proyecto necesita scaffolding, `C-01` es `foundation-setup` y no depende de nada.
 2. **Modelos core antes que features** — entidades base, mixins, repositorios.
 3. **Auth antes que recursos protegidos** — todo lo que requiere usuario logueado.
-4. **Entidad referenciada antes que la que referencia** — `categorías` antes que `productos`.
+4. **Entidad referenciada antes que la que referencia** — `productos` antes que `pedidos`.
 5. **Backend antes que frontend acoplado** — si la vista consume el endpoint, depende de él.
 6. **Integraciones externas al final** — pagos, webhooks: dependen del dominio.
 7. **Admin / dashboards al final** — dependen de los datos que muestran.
@@ -163,6 +163,7 @@ Cada change declara su nivel de riesgo. No es decorativo: te dice **dónde poner
 
 Regenerar **no borra tu progreso**. Si `CHANGES.md` ya existe, atlas entra en Modo Update:
 
+0. **Verifica que el archivo sea suyo.** `CHANGES.md` es un nombre de changelog común. Si el archivo no tiene el header de atlas ni un solo `### [C-NN]`, atlas se detiene y pregunta antes de tocarlo.
 1. Lee el archivo actual y extrae los **nombres** de los changes completados.
 2. Regenera el plan desde la KB actualizada, en memoria.
 3. Restaura el estado de cada change que **sobrevivió** a la regeneración.
@@ -197,14 +198,14 @@ El contrato completo — schema, algoritmo condicional, manejo de JSON malformad
 ```text
 ✅ atlas — CHANGES.md generado
 
-CHANGES.md creado en la raíz con 9 changes en 4 fases.
+CHANGES.md creado en la raíz con 7 changes en 4 fases.
 
 | Métrica              | Valor                   |
 |----------------------|-------------------------|
 | Camino crítico       | 6 changes               |
-| Gates de paralelismo | 3                       |
+| Gates de paralelismo | 2                       |
 | Governance CRITICO   | 2 changes               |
-| Primer change        | C-01 (foundation-setup) |
+| Primer change recomendado | C-01 (foundation-setup) |
 
 Para arrancar: /opsx:propose foundation-setup
 ```
@@ -235,6 +236,24 @@ npx skills add 3zequiel3/atlas    # re-instala = trae la última de main
 
 <details>
 <summary><b>📜 Changelog</b></summary>
+
+### v3.2 — segunda ronda de auditoría
+
+Los mismos dos revisores verificaron los fixes de v3.1 y encontraron defectos **introducidos por esa reescritura**. Corregidos:
+
+- **Piso de "Leer antes" insatisfacible**: la KB mínima legal tiene 2 nodos, pero la regla exigía 3 paths verificados. En esa entrada válida ningún change pasaba la checklist y el workflow no podía terminar. Ahora la KB real manda sobre el piso.
+- **Guard de archivo ajeno**: el Modo Update se disparaba con cualquier `CHANGES.md` — incluido un changelog común de otro proyecto — y lo sobrescribía en silencio. Ahora verifica que el archivo sea de atlas y pregunta si no lo es.
+- **Compatibilidad con v3.0**: el cambio de formato del Estado hacía que la primera regeneración sobre un archivo viejo matcheara cero checkboxes y reportara "0 de 0". Ahora se leen las dos formas y se escribe siempre la nueva.
+- **Invariante falso**: se exigía que el plan tuviera exactamente tantos pasos como el camino crítico. Solo vale con agentes ilimitados. Ahora la regla es "al menos tantos".
+- **`N` indefinido**: un proyecto de 3-4 changes con un fork real debía emitir un plan sin `N` definido. Y el conteo chocaba con "ninguna columna vacía". Ahora el ancho del grafo acota al conteo, con precedencia declarada.
+- **Hook de estado desacoplado del input**: corría solo en modo orquestado, así que un state file v2 con `kb.files` vacío dejaba al orquestador esperando para siempre.
+- **Camino crítico sin filtro subjetivo**: la exclusión de "dashboards extra" hacía la métrica irreproducible y el propio ejemplo caía justo en el límite.
+- **FASEs definidas**: agrupación por tema con restricción topológica dura, de la que depende que el invariante de IDs sea satisfacible.
+- **Nombres únicos** exigidos: la identidad del merge no podía ser ambigua.
+- **Sección de bajas** con forma definida (tabla `Change | ID anterior`) y posición fija, y el algoritmo ahora captura el ID viejo que esa fila necesita.
+- **`state.roadmap.changes`** guarda `{id, name}`: el id era posicional y arrastraba la misma corrupción que se arregló en el Modo Update.
+- **`byte-for-byte`** del state contract se reemplazó por preservación semántica, que es lo que un round-trip de JSON puede garantizar.
+- **Ejemplo del template**: 7 changes completos en vez de 9 elididos. Ahora cada número del Resumen se cuenta en el propio archivo.
 
 ### v3.1 — auditoría adversarial
 
