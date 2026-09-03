@@ -1,10 +1,14 @@
-# CHANGES Template — Plantilla completa de `CHANGES.md`
+# CHANGES Template — la forma exacta de `CHANGES.md`
 
-Esta es la **estructura exacta** que tenés que generar en la raíz del proyecto. Adaptá nombres y contenido al dominio del proyecto, pero respetá el orden y el formato de cada sección.
+Este archivo manda sobre **cómo se ve** el output. Las reglas de *qué* poner en cada sección viven en `SKILL.md`.
+
+El bloque de abajo es un ejemplo completo y **verificado**: el árbol, los gates, el camino crítico, el plan y el Resumen son consistentes entre sí. Adaptá dominio y nombres; respetá el orden y el formato.
+
+> **Cuidado con los fences.** El ejemplo va envuelto en un fence de **4 backticks** porque adentro usa fences de 3. Al escribir el `CHANGES.md` real, las secciones ASCII (árbol, gates, camino crítico, plan) van en fences normales de 3 backticks.
 
 ---
 
-```markdown
+````markdown
 # CHANGES — Secuencia de Implementación
 
 > Índice canónico de todos los changes del proyecto **{NombreProyecto}**.
@@ -15,75 +19,68 @@ Esta es la **estructura exacta** que tenés que generar en la raíz del proyecto
 
 ## Cómo usar este documento
 
-1. Identificar el change a implementar (verificar que sus dependencias están en `openspec/changes/archive/`).
-2. Leer los docs de la knowledge-base indicados en "Leer antes".
+1. Verificar que las dependencias del change target están en `openspec/changes/archive/`.
+2. Leer los docs de la KB indicados en "Leer antes" del change.
 3. Ejecutar `/opsx:propose <nombre-del-change>`.
-4. Al terminar el change, archivarlo con `/opsx:archive <nombre-del-change>`.
-5. Marcar el checkbox `[x]` en este archivo.
+4. Al terminar, archivar con `/opsx:archive <nombre-del-change>`.
+5. Marcar el checkbox `[x]` del change en este archivo.
 
 ---
 
 ## Árbol de dependencias
 
+> `←` marca dependencias **adicionales** a la arista del árbol. Un árbol no puede
+> dibujar más de un padre por nodo: cuando un change depende de varios, el padre
+> principal es la rama y el resto se anota con `← + C-XX`.
+
 ```
 C-01 foundation-setup
-  └── C-02 core-models
-        └── C-03 auth                          ← desbloquea TODO lo demás
-              │
-              ├── C-04 menu-catalog
-              │     ├── C-05 allergens
-              │     └── C-06 sectors-tables
-              │
-              ├── C-07 ingredients             ← paralelo con C-04
-              │
-              └── C-08 dashboard-shell         ← solo necesita C-03
-                    └── C-09 dashboard-pages   ← + C-04 + C-05
+└── C-02 core-models
+    └── C-03 auth
+        ├── C-04 menu-catalog
+        │   ├── C-05 allergens
+        │   └── C-06 sectors-tables
+        ├── C-07 ingredients
+        └── C-08 dashboard-shell
+            └── C-09 dashboard-pages        ← + C-05
 ```
 
 ### Paralelismo por fase
 
-> Cada "gate" es un punto de sincronización. Los changes dentro de un gate pueden ejecutarse en paralelo.
+> Cada gate es un punto de sincronización real: abre ramas paralelas (fork) o exige
+> que varias converjan (join). Los tramos lineales no son gates — están en el árbol.
 
 ```
-GATE 0: ninguna
-  → C-01 (solo)
+GATE 1: C-03 auth ✓                         ← PRIMER FORK
+  → C-04 menu-catalog                       [Agente A]
+  → C-07 ingredients                        [Agente B]
+  → C-08 dashboard-shell                    [Agente C]
 
-GATE 1: C-01 ✓
-  → C-02 (solo)
+GATE 2: C-04 menu-catalog ✓
+  → C-05 allergens                          [Agente B]
+  → C-06 sectors-tables                     [Agente A]
 
-GATE 2: C-02 ✓
-  → C-03 (solo)
-
-GATE 3: C-03 ✓                     ← PRIMER FORK (3 paralelos)
-  → C-04 menu-catalog              [Agente A]
-  → C-07 ingredients               [Agente B]
-  → C-08 dashboard-shell           [Agente C]
-
-GATE 4: C-04 ✓
-  → C-05 allergens                 [Agente B]
-  → C-06 sectors-tables            [Agente A]
-
-GATE 5: C-08 + C-04 + C-05 ✓
-  → C-09 dashboard-pages           [Agente C]
+GATE 3: C-05 + C-08 ✓                       ← JOIN
+  → C-09 dashboard-pages                    [Agente C]
 ```
 
-### Camino crítico (5 changes — mínimo irreducible)
+### Camino crítico (6 changes — cadena más larga)
 
 ```
-C-01 → C-02 → C-03 → C-04 → C-09
+C-01 → C-02 → C-03 → C-04 → C-05 → C-09
 ```
 
 ### Plan óptimo con 3 agentes
 
 ```
 Paso │ Agente A (Backend Core)  │ Agente B (Backend Aux)  │ Agente C (Frontend)
-─────┼──────────────────────────┼─────────────────────────┼─────────────────────
-  1  │ C-01 foundation-setup    │          —              │         —
-  2  │ C-02 core-models         │          —              │         —
-  3  │ C-03 auth                │          —              │         —
+─────┼──────────────────────────┼─────────────────────────┼──────────────────────
+  1  │ C-01 foundation-setup    │           —             │          —
+  2  │ C-02 core-models         │           —             │          —
+  3  │ C-03 auth                │           —             │          —
   4  │ C-04 menu-catalog        │ C-07 ingredients        │ C-08 dashboard-shell
-  5  │ C-06 sectors-tables      │ C-05 allergens          │         —
-  6  │          —               │          —              │ C-09 dashboard-pages
+  5  │ C-06 sectors-tables      │ C-05 allergens          │          —
+  6  │           —              │           —             │ C-09 dashboard-pages
 ```
 
 ---
@@ -91,25 +88,27 @@ Paso │ Agente A (Backend Core)  │ Agente B (Backend Aux)  │ Agente C (Fron
 ## FASE 0 — Cimientos
 
 ### [C-01] `foundation-setup`
-- **Estado**: `[ ]` pendiente
-- **Scope**: Scaffolding completo del monorepo + infraestructura base
+
+- [x] **Estado**
+- **Scope**: Scaffolding del monorepo + infraestructura base
   - Estructura de directorios: `backend/`, `frontend/`, `docs/`, `knowledge-base/`
-  - `backend/`: FastAPI app mínima con health check `/api/health`, Alembic inicializado, `shared/` con settings, logger, db, exceptions
-  - `frontend/`: Vite + React + TypeScript scaffolding, Zustand instalado, Tailwind
+  - `backend/`: FastAPI con health check `/api/health`, Alembic inicializado, `shared/` con settings, logger, db, exceptions
+  - `frontend/`: Vite + React + TypeScript, Zustand, Tailwind
   - `.env.example` en cada sub-proyecto
   - GitHub Actions CI: jobs paralelos para backend y frontend
   - Variables sensibles vía `${VAR}` sin defaults hardcodeados
 - **Dependencias**: ninguna
 - **Governance**: BAJO
 - **Leer antes**:
-  - `knowledge-base/01_vision_y_objetivos.md` (qué es el sistema y por qué existe)
   - `knowledge-base/02_descripcion_general.md` §Stack
   - `knowledge-base/08_arquitectura_propuesta.md` §Estructura de directorios
+  - `knowledge-base/04_modelo_de_datos.md` §Convenciones
 
 ---
 
 ### [C-02] `core-models`
-- **Estado**: `[ ]` pendiente
+
+- [ ] **Estado**
 - **Scope**: Modelos base + migraciones iniciales + seed mínimo
   - Modelos: `Tenant`, `User`, `Role`, `UserRole`
   - `AuditMixin` con `is_active`, `created_at`, `updated_at`, `deleted_at`
@@ -119,23 +118,24 @@ Paso │ Agente A (Backend Core)  │ Agente B (Backend Aux)  │ Agente C (Fron
 - **Dependencias**: `C-01`
 - **Governance**: CRITICO
 - **Leer antes**:
-  - `knowledge-base/04_modelo_de_datos.md` §entidades core
+  - `knowledge-base/04_modelo_de_datos.md` §Entidades core
   - `knowledge-base/08_arquitectura_propuesta.md` §Patrones (Repository, UoW)
-  - `knowledge-base/09_decisiones_y_supuestos.md` (decisiones de modelado)
+  - `knowledge-base/05_reglas_de_negocio.md` §Multi-tenancy
 
 ---
 
-## FASE 1A — Autenticación
+## FASE 1 — Autenticación
 
 ### [C-03] `auth`
-- **Estado**: `[ ]` pendiente
-- **Scope**: Sistema completo de autenticación JWT con RBAC
+
+- [ ] **Estado**
+- **Scope**: Autenticación JWT con RBAC
   - `POST /api/auth/login` — JWT access + refresh, rate limiting 5/60s por IP+email
   - `POST /api/auth/refresh` — rotación de refresh token, blacklist del anterior
   - `POST /api/auth/logout` — blacklist del access token
   - `GET /api/auth/me` — info del usuario actual
   - `PermissionContext`: `require_role()`, `require_admin()`
-  - Campos JWT: `sub`, `tenant_id`, `roles`, `email`, `jti`, `type`, `iat`, `exp`
+  - Claims JWT: `sub`, `tenant_id`, `roles`, `email`, `jti`, `type`, `iat`, `exp`
   - Refresh token en cookie HttpOnly (secure, samesite=lax)
   - Migración 002: tablas auth
   - Tests: login correcto, token expirado, rate limit, refresh rotation
@@ -148,21 +148,22 @@ Paso │ Agente A (Backend Core)  │ Agente B (Backend Aux)  │ Agente C (Fron
 
 ---
 
-## FASE 1B — Dominio principal
+## FASE 2 — Dominio principal
 
-> Los changes C-04 y C-07 pueden proponerse en paralelo. C-04 debe archivarse antes de C-06.
+> C-04 y C-07 se pueden proponer en paralelo. C-05 y C-06 dependen ambos de C-04.
 
 ### [C-04] `menu-catalog`
-- **Estado**: `[ ]` pendiente
+
+- [ ] **Estado**
 - **Scope**: Catálogo del menú con endpoints admin y públicos
   - Modelos: `Category`, `Subcategory`, `Product`
-  - Endpoints admin CRUD (`/api/admin/categories`, `/subcategories`, `/products`)
-  - Endpoint público: `GET /api/public/menu` — cacheado en Redis (TTL 5 min)
-  - Paginación, precios en centavos, validación anti-SSRF en URLs de imagen
+  - CRUD admin: `/api/admin/categories`, `/subcategories`, `/products`
+  - `GET /api/public/menu` — cacheado en Redis (TTL 5 min)
+  - Paginación, precios en centavos
   - Migración 003: tablas catálogo
   - Tests: CRUD, aislamiento multi-tenant, cache invalidation
 - **Dependencias**: `C-03`
-- **Governance**: BAJO
+- **Governance**: MEDIO
 - **Leer antes**:
   - `knowledge-base/04_modelo_de_datos.md` §Catálogo
   - `knowledge-base/07_flujos_principales.md` §Catálogo público
@@ -170,20 +171,8 @@ Paso │ Agente A (Backend Core)  │ Agente B (Backend Aux)  │ Agente C (Fron
 
 ---
 
-### [C-NN] `nombre-del-change`
-- **Estado**: `[ ]` pendiente
-- **Scope**: (bullets operacionales — modelos, endpoints, migraciones, eventos, tests)
-- **Dependencias**: `C-NN` | ninguna
-- **Governance**: BAJO | MEDIO | ALTO | CRITICO
-- **Leer antes**:
-  - `knowledge-base/0X_archivo.md` §sección
-  - ...
-
----
-
-## FASE {M} — {Nombre semántico}
-
-(Continuar el patrón hasta cubrir todos los changes del proyecto)
+*(FASE 2 continúa con C-05, C-06 y C-07; FASE 3 contiene C-08 y C-09. Se omiten acá por brevedad —
+en un `CHANGES.md` real van los 9 completos, y el Resumen de abajo cuenta el archivo entero.)*
 
 ---
 
@@ -193,31 +182,74 @@ Paso │ Agente A (Backend Core)  │ Agente B (Backend Aux)  │ Agente C (Fron
 |---------|-------|
 | Total changes | 9 |
 | Fases | 4 |
-| Camino crítico | 5 changes (C-01→C-02→C-03→C-04→C-09) |
-| Gates de paralelismo | 5 |
-| Governance CRITICO | 2 (C-02, C-03) |
+| Camino crítico | 6 changes |
+| Gates de paralelismo | 3 |
+| Governance CRITICO | 2 |
 | Governance ALTO | 0 |
-```
+````
 
 ---
 
-## Checklist de validación al cerrar
+## Esqueleto de un change
 
-Antes de devolver el archivo al usuario, verificá:
+Los cinco campos, en este orden exacto. **No lo copies literal** — es la forma, no contenido:
+
+| Campo | Forma | Valores |
+|-------|-------|---------|
+| Estado | `- [ ] **Estado**` / `- [x] **Estado**` | task item GFM real, primer bullet del change |
+| Scope | `- **Scope**: {resumen}` + sub-bullets | bullets operacionales |
+| Dependencias | ``- **Dependencias**: `C-NN` `` | `ninguna`, un ID, o varios separados por coma |
+| Governance | `- **Governance**: {nivel}` | BAJO, MEDIO, ALTO o CRITICO |
+| Leer antes | `- **Leer antes**:` + sub-bullets | 3 a 5 paths verificados en disco |
+
+Encabezado del change: ``### [C-NN] `nombre-kebab-case` `` — `NN` es el número real con padding de 2, el nombre va en backticks.
+
+---
+
+## Checklist de validación
+
+**Correla en el paso 14 del Workflow, antes de escribir el archivo.** Cada ítem que falle se corrige antes de seguir.
+
+**Estructura**
 
 - [ ] El header dice `# CHANGES — Secuencia de Implementación`.
-- [ ] La sección "Cómo usar este documento" tiene los 5 pasos numerados.
-- [ ] El "Árbol de dependencias" usa ASCII art con `└──` y `│`.
-- [ ] Si hay 5+ changes: existe al menos un GATE por cada fork de paralelismo detectado.
-- [ ] Si hay <5 changes: la sección GATES fue omitida con la nota correspondiente.
-- [ ] El camino crítico tiene una flecha lineal sin ramas (`C-01 → ... → C-NN`).
-- [ ] El "Plan óptimo con N agentes" tiene N columnas y pasos enumerados (N ajustado al tamaño).
-- [ ] Cada change tiene exactamente 5 campos: Estado, Scope, Dependencias, Governance, Leer antes.
-- [ ] Cada "Leer antes" tiene 3 a 5 archivos KB (con sección cuando aplique).
+- [ ] Las secciones de primer nivel siguen el orden fijo, y `## Resumen` es la última del archivo.
+- [ ] `## Cómo usar este documento` tiene 5 pasos (o 4 en modo sin OpenSpec).
+- [ ] Los changes están agrupados en `## FASE {N}` con nombres semánticos y numeración entera sin sufijos de letra.
+
+**Grafo**
+
+- [ ] El árbol usa ASCII con `└──` y `│`, dentro de un fence de 3 backticks.
+- [ ] Todo change con más de un padre tiene su anotación `← + C-XX`.
+- [ ] Cada arista del camino crítico existe en el árbol.
+- [ ] El camino crítico es la cadena **más larga**: ninguna otra cadena del árbol tiene más changes.
+- [ ] Si hay gates: cada uno es un fork (2+ hijos) o un join (2+ predecesores). Ningún tramo lineal figura como gate.
+- [ ] Si no hay forks ni joins: `### Paralelismo por fase` y `### Plan óptimo` están omitidos, con la nota correspondiente en su lugar.
+
+**Coherencia numérica**
+
+- [ ] `Total changes` = cantidad de encabezados `### [C-NN]`.
+- [ ] `Fases` = cantidad de encabezados `## FASE`.
+- [ ] `Gates de paralelismo` = cantidad de bloques `GATE`.
+- [ ] `Camino crítico` = cantidad de changes de la cadena = cantidad de pasos del Plan con N agentes.
+- [ ] `Governance CRITICO` y `ALTO` = conteo real de changes con ese nivel.
+- [ ] El ID de cada change es mayor que el de todas sus dependencias.
+
+**Por change**
+
+- [ ] Exactamente 5 campos: Estado, Scope, Dependencias, Governance, Leer antes.
+- [ ] El Estado es un task item GFM real (`- [ ] **Estado**`), no `` `[ ]` `` entre backticks.
 - [ ] El Scope tiene bullets operacionales (modelos, endpoints, migraciones, tests).
-- [ ] Cada Governance es uno de: BAJO, MEDIO, ALTO, CRITICO.
-- [ ] Los changes están agrupados en FASES con nombres semánticos (no "Fase 1, 2, 3" pelados).
-- [ ] La tabla **Resumen** está al final con todas sus filas completas.
-- [ ] Si fue Modo Update: los checkboxes `[x]` preservados están restaurados en el nuevo archivo.
-- [ ] Si fue Modo Update y hubo changes eliminados con `[x]`: existe la sección `## ⚠️ Changes eliminados (tenían progreso)`.
-- [ ] Los encabezados de change usan el formato exacto: `### [C-NN] \`nombre-kebab-case\`` (sin llaves, NN = número real con padding).
+- [ ] Ningún change con seguridad, permisos o aislamiento de datos en el Scope está marcado BAJO.
+- [ ] Cada "Leer antes" tiene 3 a 5 paths, **todos verificados en disco**.
+- [ ] En modo orquestado, los paths de "Leer antes" son los reales de `state.kb.files`.
+
+**Modo Update**
+
+- [ ] Los `[x]` preservados se matchearon **por nombre**, no por `C-NN`.
+- [ ] Si hubo changes con progreso que desaparecieron: existe `## ⚠️ Changes eliminados (tenían progreso)`, ubicada antes del Resumen.
+- [ ] El archivo se escribió **una sola vez**, ya con los checkboxes restaurados.
+
+**Higiene**
+
+- [ ] No quedó ningún placeholder literal (`{NombreProyecto}`, `C-NN`, `0X_archivo.md`) en el output.
