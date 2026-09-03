@@ -1,0 +1,16 @@
+# Atlas skill — gitignore
+
+# Antigravity / gentle-ai tooling state (local only)
+.atl/
+skill-registry.md
+.skill-registry.cache.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
